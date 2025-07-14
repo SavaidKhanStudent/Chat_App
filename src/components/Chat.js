@@ -268,19 +268,7 @@ const Chat = () => {
         seenAt: null,
       });
 
-      // Optional: Trigger notification for the other user
-      const friendUser = users[friendUid];
-      if (friendUser && !friendUser.onChatPage && friendUser.fcmToken) {
-        const senderName = users[currentUser.uid]?.displayName || 'Anonymous';
-        const notificationRef = doc(collection(db, 'notifications'));
-        await setDoc(notificationRef, {
-          recipientUid: friendUid,
-          senderName: senderName,
-          message: tempMessage.substring(0, 50) + (tempMessage.length > 50 ? '...' : ''),
-          chatId: chatId,
-          createdAt: serverTimestamp()
-        });
-      }
+
     } catch (error) {
       addNotification(getFriendlyFirebaseError(error), 'error');
       // Restore the message so the user can try again

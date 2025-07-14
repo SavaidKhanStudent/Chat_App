@@ -4,42 +4,6 @@ admin.initializeApp();
 
 const db = admin.firestore();
 
-exports.sendPushNotification = functions.firestore
-    .document("notifications/{notificationId}")
-    .onCreate(async (snap, context) => {
-        const notificationData = snap.data();
-        const {recipientUid, senderName, message} = notificationData;
-
-        const userDoc = await admin.firestore().collection("users").doc(recipientUid).get();
-        if (!userDoc.exists) {
-            console.log(`User document for UID ${recipientUid} not found.`);
-            return;
-        }
-
-        const fcmToken = userDoc.data().fcmToken;
-        if (!fcmToken) {
-            console.log(`FCM token for user ${recipientUid} not found.`);
-            return;
-        }
-
-        const payload = {
-            notification: {
-                title: `New message from ${senderName}`,
-                body: message,
-                icon: "/favicon.ico",
-            },
-            token: fcmToken,
-        };
-
-        try {
-            const response = await admin.messaging().send(payload);
-            console.log("Successfully sent message:", response);
-            return snap.ref.delete();
-        } catch (error) {
-            console.error("Error sending message:", error);
-        }
-    });
-
 exports.deleteOldMessages = functions.pubsub
     .schedule("every 24 hours")
     .onRun(async (context) => {
