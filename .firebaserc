@@ -1,5 +1,8 @@
 {
   "projects": {
-    "default": "chatapp-427be"
-  }
+    "default": "chatapp-427be",
+    "Windchat": "chatapp-e4e25"
+  },
+  "targets": {},
+  "etags": {}
 }
