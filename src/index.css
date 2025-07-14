@@ -1,0 +1,49 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  --primary-color: #4f46e5;
+  --primary-hover: #4338ca;
+  
+  --sidebar-bg: #1f2937; /* Dark Gray */
+  --chat-window-bg: #111827; /* Almost Black */
+  
+  --sent-message-bg: #4f46e5; /* Indigo */
+  --received-message-bg: #374151; /* Lighter Dark Gray */
+
+  --hover-bg: #374151;
+  --active-bg: #4f46e5;
+
+  --text-primary: #f9fafb; /* Off-white */
+  --text-secondary: #9ca3af; /* Light Gray */
+  
+  --border-color: #374151;
+  --shadow-color: rgba(0, 0, 0, 0.25);
+
+  --danger-color: #ef4444;
+  --danger-hover: #dc2626;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--chat-window-bg);
+  color: var(--text-primary);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  overflow: hidden;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
