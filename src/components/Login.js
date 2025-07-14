@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth } from '../firebase';
-import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { getAdditionalUserInfo, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '../firebase';
 import { FaUser, FaLock, FaGoogle } from 'react-icons/fa';
 import './Login.css';
 
@@ -28,14 +30,39 @@ const Login = () => {
   const handleGoogleLogin = async () => {
     setLoading(true);
     setError('');
+    const provider = new GoogleAuthProvider();
     try {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-      navigate('/chat');
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+      const additionalUserInfo = getAdditionalUserInfo(result);
+
+      // Check if it's a new user and create a document in Firestore
+      if (additionalUserInfo?.isNewUser) {
+        await setDoc(doc(db, 'users', user.uid), {
+          uid: user.uid,
+          displayName: user.displayName, // Initially from Google
+          email: user.email,
+          photoURL: user.photoURL,
+          createdAt: serverTimestamp(),
+          online: true,
+          profileSetupComplete: false, // New flag
+        });
+      } else {
+        // For existing users, just update their online status
+        const userDocRef = doc(db, 'users', user.uid);
+        const docSnap = await getDoc(userDocRef);
+        if (docSnap.exists()) {
+          await setDoc(userDocRef, { online: true }, { merge: true });
+        }
+      }
+
+      navigate('/chat'); // Navigate after handling user doc
     } catch (err) {
+      console.error("Google Login Error:", err);
       setError('Failed to sign in with Google.');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (

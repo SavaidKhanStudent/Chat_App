@@ -1,17 +1,32 @@
-import React, { useState } from 'react';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../firebase';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { doc, updateDoc } from 'firebase/firestore';
+import { updateProfile } from 'firebase/auth';
+import { db, auth } from '../firebase';
+import { useAuth } from '../AuthContext';
 import './ProfileSetup.css';
 
-const ProfileSetup = ({ user, onComplete }) => {
+const ProfileSetup = () => {
+  const { currentUser } = useAuth();
+  const navigate = useNavigate();
   const [displayName, setDisplayName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  useEffect(() => {
+    if (currentUser?.displayName) {
+      setDisplayName(currentUser.displayName);
+    }
+  }, [currentUser]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (displayName.trim() === '') {
-      setError('Please enter a name.');
+    if (displayName.trim().length < 3) {
+      setError('Display name must be at least 3 characters long.');
+      return;
+    }
+    if (!currentUser) {
+      setError('No user is logged in.');
       return;
     }
 
@@ -19,19 +34,22 @@ const ProfileSetup = ({ user, onComplete }) => {
     setError('');
 
     try {
-      const userDocRef = doc(db, 'users', user.uid);
-      await setDoc(userDocRef, {
-        uid: user.uid,
-        displayName: displayName.trim(),
-        email: user.email,
-        photoURL: user.photoURL,
-        online: true,
-        createdAt: serverTimestamp(),
-      });
-      onComplete();
+      const userDocRef = doc(db, 'users', currentUser.uid);
+      const newName = displayName.trim();
+
+      // Update both Auth and Firestore
+      await Promise.all([
+        updateProfile(auth.currentUser, { displayName: newName }),
+        updateDoc(userDocRef, {
+          displayName: newName,
+          profileSetupComplete: true,
+        }),
+      ]);
+
+      navigate('/'); // Redirect to chat on success
     } catch (err) {
-      setError('Failed to save name. Please try again.');
-      console.error(err);
+      setError('Failed to save profile. Please try again.');
+      console.error('Profile setup error:', err);
     } finally {
       setLoading(false);
     }
@@ -40,7 +58,7 @@ const ProfileSetup = ({ user, onComplete }) => {
   return (
     <div className="profile-setup-overlay">
       <div className="profile-setup-modal">
-        <h2>Welcome! What's your name?</h2>
+        <h2>Set Up Your Profile</h2>
         <p>This name will be visible to other users.</p>
         <form onSubmit={handleSubmit}>
           <input

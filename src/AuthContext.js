@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { auth, db, rtdb } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { ref, onValue, set, onDisconnect, serverTimestamp as rtdbServerTimestamp } from 'firebase/database';
 
 const AuthContext = createContext();
@@ -11,82 +11,76 @@ export const useAuth = () => {
 };
 
 export const AuthProvider = ({ children }) => {
-    const [currentUser, setCurrentUser] = useState(null);
-    const [loading, setLoading] = useState(true); // Start with loading true
-  const [isNewUser, setIsNewUser] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [userProfile, setUserProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-          const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      console.log('Auth state changed, user:', user);
-      if (user) {
-                        const userDocRef = doc(db, 'users', user.uid);
-        const docSnap = await getDoc(userDocRef);
+    let profileUnsubscribe; // To hold the onSnapshot unsubscribe function
 
-                if (!docSnap.exists()) {
-          console.log('User document does not exist. Prompting for profile setup.');
-          setIsNewUser(true);
-        } else {
-          console.log('User document found. Setting as existing user.');
-          setIsNewUser(false);
-          // Existing user, update online status
-          await updateDoc(userDocRef, { online: true });
+    const authUnsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setCurrentUser(user);
+        // Clean up any previous profile listener
+        if (profileUnsubscribe) {
+          profileUnsubscribe();
         }
 
-        setCurrentUser(user);
+        const userDocRef = doc(db, 'users', user.uid);
+        profileUnsubscribe = onSnapshot(userDocRef, (docSnap) => {
+          if (docSnap.exists()) {
+            const profileData = docSnap.data();
+            setUserProfile(profileData);
+            // Update online status if needed
+            if (!profileData.online) {
+              updateDoc(userDocRef, { online: true });
+            }
+          } else {
+            setUserProfile(null); // User document doesn't exist yet
+          }
+          setLoading(false);
+        });
 
-        // Realtime Database presence
+        // Realtime Database presence management
         const userStatusDatabaseRef = ref(rtdb, '/status/' + user.uid);
-        const isOfflineForDatabase = {
-          state: 'offline',
-          last_changed: rtdbServerTimestamp(),
-        };
-        const isOnlineForDatabase = {
-          state: 'online',
-          last_changed: rtdbServerTimestamp(),
-        };
+        const isOfflineForDatabase = { state: 'offline', last_changed: rtdbServerTimestamp() };
+        const isOnlineForDatabase = { state: 'online', last_changed: rtdbServerTimestamp() };
 
         onValue(ref(rtdb, '.info/connected'), (snapshot) => {
-          if (snapshot.val() === false) {
-            return;
-          }
+          if (snapshot.val() === false) return;
           onDisconnect(userStatusDatabaseRef).set(isOfflineForDatabase).then(() => {
             set(userStatusDatabaseRef, isOnlineForDatabase);
-
-            // Also update Firestore on disconnect
             const userStatusFirestoreRef = doc(db, 'users', user.uid);
-            onDisconnect(userStatusFirestoreRef).update({ 
-              online: false, 
-              lastSeen: serverTimestamp() 
-            });
+            onDisconnect(userStatusFirestoreRef).update({ online: false, lastSeen: serverTimestamp() });
           });
         });
 
       } else {
-        // User is signed out.
+        // User is signed out
+        if (profileUnsubscribe) profileUnsubscribe();
         if (currentUser) {
-          const userRef = doc(db, 'users', currentUser.uid);
-          setDoc(userRef, { online: false, lastSeen: serverTimestamp() }, { merge: true });
-                  // RTDB offline status is handled by onDisconnect
+            const userRef = doc(db, 'users', currentUser.uid);
+            updateDoc(userRef, { online: false, lastSeen: serverTimestamp() }).catch(() => {});
         }
-                console.log('User is signed out.');
         setCurrentUser(null);
-        setIsNewUser(false);
+        setUserProfile(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
 
-        return unsubscribe;
-  }, []);
+    // Cleanup function for the useEffect hook
+    return () => {
+      authUnsubscribe();
+      if (profileUnsubscribe) {
+        profileUnsubscribe();
+      }
+    };
+  }, []); // Run only once on mount
 
-    const handleProfileComplete = () => {
-    setIsNewUser(false);
-  };
-
-    const value = {
+  const value = {
     currentUser,
-    isNewUser,
-    loading, // Expose loading state
-    handleProfileComplete
+    userProfile, // Expose the full Firestore profile
+    loading,
   };
 
   return (
