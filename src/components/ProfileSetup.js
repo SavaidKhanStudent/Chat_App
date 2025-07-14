@@ -4,14 +4,16 @@ import { doc, updateDoc } from 'firebase/firestore';
 import { updateProfile } from 'firebase/auth';
 import { db, auth } from '../firebase';
 import { useAuth } from '../AuthContext';
+import { useNotifier } from '../context/ErrorContext';
+import { getFriendlyFirebaseError } from '../utils/firebaseErrors';
 import './ProfileSetup.css';
 
 const ProfileSetup = () => {
   const { currentUser } = useAuth();
   const navigate = useNavigate();
+  const { addNotification } = useNotifier();
   const [displayName, setDisplayName] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
 
   useEffect(() => {
     if (currentUser?.displayName) {
@@ -22,16 +24,15 @@ const ProfileSetup = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (displayName.trim().length < 3) {
-      setError('Display name must be at least 3 characters long.');
+      addNotification('Display name must be at least 3 characters long.', 'error');
       return;
     }
     if (!currentUser) {
-      setError('No user is logged in.');
+      addNotification('No user is logged in.', 'error');
       return;
     }
 
     setLoading(true);
-    setError('');
 
     try {
       const userDocRef = doc(db, 'users', currentUser.uid);
@@ -48,8 +49,8 @@ const ProfileSetup = () => {
 
       navigate('/'); // Redirect to chat on success
     } catch (err) {
-      setError('Failed to save profile. Please try again.');
-      console.error('Profile setup error:', err);
+      const friendlyMessage = getFriendlyFirebaseError(err);
+      addNotification(friendlyMessage, 'error');
     } finally {
       setLoading(false);
     }
@@ -68,7 +69,6 @@ const ProfileSetup = () => {
             placeholder="Enter your display name"
             disabled={loading}
           />
-          {error && <p className="error-message">{error}</p>}
           <button type="submit" disabled={loading}>
             {loading ? <div className="spinner"></div> : 'Save and Continue'}
           </button>

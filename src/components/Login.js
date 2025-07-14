@@ -4,6 +4,8 @@ import { auth } from '../firebase';
 import { getAdditionalUserInfo, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
+import { useNotifier } from '../context/ErrorContext';
+import { getFriendlyFirebaseError } from '../utils/firebaseErrors';
 import { FaUser, FaLock, FaGoogle } from 'react-icons/fa';
 import './Login.css';
 
@@ -11,41 +13,40 @@ const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   const navigate = useNavigate();
+  const { addNotification } = useNotifier();
 
   const handleEmailLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setError('');
     try {
       await signInWithEmailAndPassword(auth, email, password);
       navigate('/chat');
     } catch (err) {
-      setError('Failed to sign in. Please check your credentials.');
+      const friendlyMessage = getFriendlyFirebaseError(err);
+      addNotification(friendlyMessage, 'error');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleGoogleLogin = async () => {
     setLoading(true);
-    setError('');
     const provider = new GoogleAuthProvider();
     try {
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
       const additionalUserInfo = getAdditionalUserInfo(result);
 
-      // Check if it's a new user and create a document in Firestore
       if (additionalUserInfo?.isNewUser) {
         await setDoc(doc(db, 'users', user.uid), {
           uid: user.uid,
-          displayName: user.displayName, // Initially from Google
+          displayName: user.displayName,
           email: user.email,
           photoURL: user.photoURL,
           createdAt: serverTimestamp(),
           online: true,
-          profileSetupComplete: false, // New flag
+          profileSetupComplete: false, // New user, profile setup is not complete
         });
       } else {
         // For existing users, just update their online status
@@ -55,11 +56,10 @@ const Login = () => {
           await setDoc(userDocRef, { online: true }, { merge: true });
         }
       }
-
-      navigate('/chat'); // Navigate after handling user doc
+      // No need to navigate here, the AuthContext and router will handle it.
     } catch (err) {
-      console.error("Google Login Error:", err);
-      setError('Failed to sign in with Google.');
+      const friendlyMessage = getFriendlyFirebaseError(err);
+      addNotification(friendlyMessage, 'error');
     } finally {
       setLoading(false);
     }
@@ -69,7 +69,6 @@ const Login = () => {
     <div className="login-container">
       <div className="login-box">
         <h2>Welcome Back</h2>
-        {error && <p className="error">{error}</p>}
         <form onSubmit={handleEmailLogin}>
           <div className="input-group">
             <FaUser className="icon" />

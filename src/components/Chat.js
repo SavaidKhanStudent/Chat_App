@@ -3,8 +3,10 @@ import { auth, db } from '../firebase';
 import { signOut } from 'firebase/auth';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, setDoc, writeBatch, updateDoc } from 'firebase/firestore';
 import { useAuth } from '../AuthContext';
+import { useNotifier } from '../context/ErrorContext';
+import { getFriendlyFirebaseError } from '../utils/firebaseErrors';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { FaPaperPlane, FaUserFriends, FaSignOutAlt, FaTimes, FaEdit } from 'react-icons/fa';
+import { FaPaperPlane, FaUserFriends, FaSignOutAlt, FaTimes } from 'react-icons/fa';
 import { BsArrowLeft } from 'react-icons/bs';
 import { formatDistanceToNow } from 'date-fns';
 import Message from './Message';
@@ -26,6 +28,7 @@ const Chat = () => {
   const navigate = useNavigate();
   const { chatId: friendUid } = useParams(); // Renaming for clarity
   const { currentUser } = useAuth();
+  const { addNotification } = useNotifier();
   const [messages, setMessages] = useState([]);
     const [newMessage, setNewMessage] = useState('');
     const [users, setUsers] = useState({});
@@ -60,22 +63,30 @@ const Chat = () => {
   const handleEditMessage = async (messageId, newText) => {
     const chatId = getChatId(currentUser.uid, friendUid);
     const msgRef = doc(db, `chats/${chatId}/messages`, messageId);
-    await updateDoc(msgRef, {
-      text: newText,
-      edited: true
-    });
+    try {
+      await updateDoc(msgRef, {
+        text: newText,
+        edited: true
+      });
+    } catch (error) {
+      addNotification(getFriendlyFirebaseError(error), 'error');
+    }
   };
 
   const handleDeleteMessage = async (messageId, type) => {
     if (type === 'everyone') {
       const chatId = getChatId(currentUser.uid, friendUid);
       const msgRef = doc(db, `chats/${chatId}/messages`, messageId);
-      await updateDoc(msgRef, {
-        text: 'This message was deleted',
-        deleted: true,
-        replyTo: null, // Clear reply context
-        edited: false // Clear edited status
-      });
+      try {
+        await updateDoc(msgRef, {
+          text: 'This message was deleted',
+          deleted: true,
+          replyTo: null, // Clear reply context
+          edited: false // Clear edited status
+        });
+      } catch (error) {
+        addNotification(getFriendlyFirebaseError(error), 'error');
+      }
     } else if (type === 'me') {
       const newDeletedForMe = [...deletedForMe, messageId];
       setDeletedForMe(newDeletedForMe);
@@ -108,7 +119,9 @@ const Chat = () => {
           const msgRef = doc(db, `chats/${chatId}/messages`, msg.id);
           batch.update(msgRef, { seen: true, seenAt: serverTimestamp() });
         });
-        batch.commit();
+        batch.commit().catch(error => {
+          addNotification(getFriendlyFirebaseError(error), 'error');
+        });
       }
     }
   }, [isTabVisible, messages, currentUser, friendUid, getChatId]);
@@ -157,12 +170,16 @@ const Chat = () => {
       }
 
       if (batchHasWrites) {
-        batch.commit();
+        batch.commit().catch(error => {
+          addNotification(getFriendlyFirebaseError(error), 'error');
+        });
       }
+    }, (error) => {
+      addNotification(getFriendlyFirebaseError(error), 'error');
     });
 
         return unsubscribe;
-  }, [currentUser, friendUid, isTabVisible, getChatId]);
+  }, [currentUser, friendUid, isTabVisible, getChatId, addNotification]);
 
   // Users presence listener
   useEffect(() => {
@@ -173,9 +190,11 @@ const Chat = () => {
         usersData[doc.id] = doc.data();
       });
       setUsers(usersData);
+    }, (error) => {
+      addNotification(getFriendlyFirebaseError(error), 'error');
     });
     return unsubscribe;
-  }, []);
+  }, [addNotification]);
 
   // Set user presence and onChatPage status
   useEffect(() => {
@@ -201,7 +220,7 @@ const Chat = () => {
       setDoc(userRef, { onChatPage: false, lastSeen: serverTimestamp() }, { merge: true });
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
-  }, [currentUser]);
+  }, [currentUser, addNotification]);
 
   // Auto-scroll
   useEffect(() => {
@@ -229,35 +248,46 @@ const Chat = () => {
 
     const chatId = getChatId(currentUser.uid, friendUid);
     const messagesCol = collection(db, `chats/${chatId}/messages`);
-
-            await addDoc(messagesCol, {
-      text: newMessage,
-      senderId: currentUser.uid,
-      senderName: currentUser.displayName,
-      timestamp: serverTimestamp(),
-      replyTo: replyingTo ? replyingTo.id : null,
-      seen: false,
-      deliveredTo: [],
-      seenAt: null,
-    });
-
-    // Optional: Trigger notification for the other user
-    const friendUser = users[friendUid];
-    if (friendUser && !friendUser.onChatPage && friendUser.fcmToken) {
-            const senderName = users[currentUser.uid]?.displayName || 'Anonymous';
-      const notificationRef = doc(collection(db, 'notifications'));
-      await setDoc(notificationRef, {
-        recipientUid: friendUid,
-        senderName: senderName,
-        message: newMessage.substring(0, 50) + (newMessage.length > 50 ? '...' : ''),
-        chatId: chatId,
-        createdAt: serverTimestamp()
-      });
-    }
+    const tempMessage = newMessage;
+    const tempReplyingTo = replyingTo;
 
     setNewMessage('');
     if (replyingTo) {
       cancelReply();
+    }
+
+    try {
+      await addDoc(messagesCol, {
+        text: tempMessage,
+        senderId: currentUser.uid,
+        senderName: currentUser.displayName,
+        timestamp: serverTimestamp(),
+        replyTo: tempReplyingTo ? tempReplyingTo.id : null,
+        seen: false,
+        deliveredTo: [],
+        seenAt: null,
+      });
+
+      // Optional: Trigger notification for the other user
+      const friendUser = users[friendUid];
+      if (friendUser && !friendUser.onChatPage && friendUser.fcmToken) {
+        const senderName = users[currentUser.uid]?.displayName || 'Anonymous';
+        const notificationRef = doc(collection(db, 'notifications'));
+        await setDoc(notificationRef, {
+          recipientUid: friendUid,
+          senderName: senderName,
+          message: tempMessage.substring(0, 50) + (tempMessage.length > 50 ? '...' : ''),
+          chatId: chatId,
+          createdAt: serverTimestamp()
+        });
+      }
+    } catch (error) {
+      addNotification(getFriendlyFirebaseError(error), 'error');
+      // Restore the message so the user can try again
+      setNewMessage(tempMessage);
+      if (tempReplyingTo) {
+        setReplyingTo(tempReplyingTo);
+      }
     }
   };
 
