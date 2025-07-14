@@ -4,8 +4,8 @@ import { signOut } from 'firebase/auth';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, setDoc, writeBatch, updateDoc } from 'firebase/firestore';
 import { useAuth } from '../AuthContext';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { FaPaperPlane, FaUserFriends, FaSignOutAlt, FaTimes } from 'react-icons/fa';
-import { BsCheck, BsCheck2All } from 'react-icons/bs';
+import { FaPaperPlane, FaUserFriends, FaSignOutAlt, FaTimes, FaEdit } from 'react-icons/fa';
+import { BsArrowLeft } from 'react-icons/bs';
 import { formatDistanceToNow } from 'date-fns';
 import Message from './Message';
 import './Chat.css';
@@ -30,13 +30,15 @@ const Chat = () => {
     const [newMessage, setNewMessage] = useState('');
     const [users, setUsers] = useState({});
     const [isTabVisible, setIsTabVisible] = useState(document.visibilityState === 'visible');
-    const [tick, setTick] = useState(0); // For re-rendering to update timestamps
+
     const [replyingTo, setReplyingTo] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
   const [deletedForMe, setDeletedForMe] = useState(() => {
     const saved = localStorage.getItem(`deletedMessages_${currentUser?.uid}`);
     return saved ? JSON.parse(saved) : [];
   });
   const scrollRef = useRef();
+  const textareaRef = useRef(null);
 
       const getChatId = useCallback((uid1, uid2) => {
     if (!uid1 || !uid2) return null;
@@ -93,13 +95,7 @@ const Chat = () => {
         return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, []);
 
-  // Timer to update relative timestamps every minute
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setTick(prev => prev + 1);
-    }, 60000);
-    return () => clearInterval(timer);
-  }, []);
+
 
   // Mark messages as seen when tab becomes visible
   useEffect(() => {
@@ -135,10 +131,16 @@ const Chat = () => {
       let batchHasWrites = false;
 
       // Mark messages as delivered
-      const undeliveredMessages = snapshot.docs.filter(doc => doc.data().senderId === friendUid && !doc.data().delivered);
+      const undeliveredMessages = snapshot.docs.filter(doc => {
+        const data = doc.data();
+        return data.senderId === friendUid && !data.deliveredTo?.includes(currentUser.uid);
+      });
+
       if (undeliveredMessages.length > 0) {
         undeliveredMessages.forEach(doc => {
-          batch.update(doc.ref, { delivered: true });
+          batch.update(doc.ref, { 
+            deliveredTo: [...(doc.data().deliveredTo || []), currentUser.uid]
+          });
         });
         batchHasWrites = true;
       }
@@ -206,6 +208,16 @@ const Chat = () => {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Auto-resize textarea
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = 'auto'; // Reset height to recalculate
+      const newHeight = Math.min(textarea.scrollHeight, 120); // Max height 120px
+      textarea.style.height = `${newHeight}px`;
+    }
+  }, [newMessage]);
+
   const handleLogout = async () => {
     await signOut(auth);
     navigate('/');
@@ -221,12 +233,12 @@ const Chat = () => {
             await addDoc(messagesCol, {
       text: newMessage,
       senderId: currentUser.uid,
-      senderName: users[currentUser.uid]?.displayName || 'Anonymous',
+      senderName: currentUser.displayName,
       timestamp: serverTimestamp(),
-      delivered: false,
+      replyTo: replyingTo ? replyingTo.id : null,
       seen: false,
+      deliveredTo: [],
       seenAt: null,
-      replyTo: replyingTo ? replyingTo.id : null
     });
 
     // Optional: Trigger notification for the other user
@@ -252,21 +264,38 @@ const Chat = () => {
     const visibleMessages = messages.filter(msg => !deletedForMe.includes(msg.id));
 
   return (
-    <div className="chat-container">
+    <div className={`chat-container ${friendUid ? 'chat-active' : ''}`}>
       <div className="sidebar">
         <div className="sidebar-header">
-          <h3><FaUserFriends /> Users</h3>
+          <h3>Chats</h3>
+          {/* Search bar can be added here if desired */}
+        </div>
+        <div className="search-bar-container">
+          <input
+            type="text"
+            placeholder="Search or start new chat"
+            className="search-input"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
         </div>
         <div className="user-list">
           {Object.entries(users)
-            .filter(([uid]) => uid !== currentUser?.uid)
+            .filter(([uid, user]) => 
+              uid !== currentUser?.uid &&
+              user.displayName?.toLowerCase().includes(searchQuery.toLowerCase())
+            )
             .map(([uid, user]) => (
             <Link to={`/chat/${uid}`} key={uid} className={`user-item ${friendUid === uid ? 'active' : ''}`}>
-                            <div className="avatar">{getInitials(user.displayName)}</div>
+              <div className="avatar-container">
+                <div className="avatar">{getInitials(user.displayName)}</div>
+                {user.online && <span className="status-dot online"></span>}
+              </div>
               <div className="user-info">
                 <span className="user-name">{user.displayName}</span>
-                <span className={`status-dot ${user.online ? 'online' : 'offline'}`}></span>
-                <span className="last-seen">{!user.online && formatLastSeen(user.lastSeen)}</span>
+                <span className="last-seen">
+                  {!user.online && user.lastSeen ? formatLastSeen(user.lastSeen) : ''}
+                </span>
               </div>
             </Link>
           ))}
@@ -281,6 +310,9 @@ const Chat = () => {
         {friendUid && users[friendUid] ? (
           <>
                         <div className="chat-header">
+              <button className="back-btn" onClick={() => navigate('/')}>
+                <BsArrowLeft />
+              </button>
               <div className="avatar header-avatar">{getInitials(users[friendUid]?.displayName)}</div>
               <div className="chat-header-info">
                 <h2>{users[friendUid]?.displayName || 'Chat'}</h2>
@@ -293,6 +325,7 @@ const Chat = () => {
                   key={msg.id} 
                   msg={msg} 
                   currentUser={currentUser} 
+                  friendUid={friendUid}
                   onReply={handleReply}
                   getMessageById={getMessageById}
                   formatSeenAt={formatSeenAt}
@@ -302,25 +335,36 @@ const Chat = () => {
               ))}
               <div ref={scrollRef}></div>
             </div>
-            {replyingTo && (
-              <div className="reply-preview">
-                <div className="reply-preview-content">
-                  <p className="reply-preview-sender">Replying to {users[replyingTo.senderId]?.displayName}</p>
-                  <p className="reply-preview-text">{replyingTo.text}</p>
+            <div className="message-form-container">
+              {replyingTo && (
+                <div className="reply-preview">
+                  <div className="reply-preview-content">
+                    <p className="reply-preview-sender">Replying to {users[replyingTo.senderId]?.displayName}</p>
+                    <p className="reply-preview-text">{replyingTo.text}</p>
+                  </div>
+                  <button onClick={cancelReply} className="cancel-reply-btn"><FaTimes /></button>
                 </div>
-                <button onClick={cancelReply} className="cancel-reply-btn"><FaTimes /></button>
-              </div>
-            )}
-            <form className="message-form" onSubmit={handleSendMessage}>
-              <input
-                type="text"
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                placeholder="Type a message..."
-                disabled={!currentUser}
-              />
-              <button type="submit" disabled={!currentUser}><FaPaperPlane /></button>
-            </form>
+              )}
+              <form className="message-form" onSubmit={handleSendMessage}>
+                <textarea
+                  ref={textareaRef}
+                  value={newMessage}
+                  onChange={(e) => setNewMessage(e.target.value)}
+                  placeholder="Type a message..."
+                  disabled={!currentUser || !friendUid}
+                  rows="1"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendMessage(e);
+                    }
+                  }}
+                />
+                <button type="submit" disabled={!currentUser || !friendUid || newMessage.trim() === ''}>
+                  <FaPaperPlane />
+                </button>
+              </form>
+            </div>
           </>
         ) : (
           <div className="placeholder">

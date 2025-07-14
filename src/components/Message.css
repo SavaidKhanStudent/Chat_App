@@ -1,60 +1,48 @@
-/* Message Wrapper */
-.message-wrapper {
-  display: flex;
-  flex-direction: column;
-  margin-bottom: 0.5rem;
-  max-width: 75%;
-  align-self: flex-start;
-}
-
-.message-wrapper.sent {
-  align-self: flex-end;
-}
-
-/* Main Message Bubble */
+/* Base Message Container */
 .message-container {
   display: flex;
-  margin-bottom: 0.75rem;
-  max-width: 70%;
+  margin-bottom: 0.5rem;
+  max-width: 75%;
   position: relative;
 }
 
 .message-container.sent {
-  align-self: flex-end;
-  flex-direction: row-reverse;
+  margin-left: auto;
+  flex-direction: row-reverse; /* For action menu positioning */
 }
 
 .message-container.received {
-  align-self: flex-start;
+  margin-right: auto;
 }
 
+/* Message Bubble Styling */
 .message-bubble {
-  padding: 10px 15px;
-  border-radius: 18px;
+  padding: 6px 12px;
+  border-radius: 12px;
   position: relative;
-  color: var(--text-primary);
-  transition: background-color 0.2s ease;
+  word-wrap: break-word;
+  display: inline-block;
+  max-width: 100%;
+  position: relative; /* Needed for menu trigger positioning */
 }
 
 .message-container.sent .message-bubble {
-  background-color: var(--sent-message-bg);
-  border-bottom-right-radius: 4px;
+  background-color: #dcf8c6; /* WhatsApp sent green */
+  color: #303030;
+  border-radius: 12px 4px 12px 12px; /* Tail on bottom right */
 }
 
 .message-container.received .message-bubble {
-  background-color: var(--received-message-bg);
-  border-bottom-left-radius: 4px;
+  background-color: #ffffff; /* WhatsApp received white */
+  color: #303030;
+  border-radius: 4px 12px 12px 12px; /* Tail on bottom left */
+  border: 1px solid #f0f0f0; /* Subtle border for white bubbles */
 }
 
-.message-content {
-  display: flex;
-  flex-direction: column;
-}
-
+/* Message Content & Meta */
 .message-text {
   margin: 0;
-  padding-right: 10px; /* Space for meta */
-  word-wrap: break-word;
+  padding: 0 0 4px 0; /* Space for meta */
   white-space: pre-wrap;
   font-size: 0.95rem;
   line-height: 1.4;
@@ -63,111 +51,70 @@
 .message-meta {
   display: flex;
   align-items: center;
-  position: absolute;
-  bottom: 8px;
-  right: 12px;
-  font-size: 0.7rem;
-  color: var(--text-secondary);
+  justify-content: flex-end;
+  font-size: 0.75rem;
+  color: #8a8a8a; /* Subtle grey for meta */
+  float: right;
+  margin-top: -10px; /* Pull it up into the bubble padding */
+  margin-left: 8px; /* Space from text */
 }
 
-.message-container.sent .message-meta {
-  color: rgba(238, 242, 255, 0.8);
+.timestamp {
+  margin-right: 4px;
 }
 
-.message-status {
-  display: flex;
-  align-items: center;
-  margin-left: 4px;
-}
-
-.message-status svg {
-  width: 16px;
-  height: 16px;
-}
-
-.message-container.sent .message-status.sent {
-  color: rgba(238, 242, 255, 0.8);
-}
-
-.message-container.sent .message-status.delivered {
-  color: rgba(238, 242, 255, 0.8);
-}
-
-.message-container.sent .message-status.seen {
-  color: #a7f3d0; /* Light Green */
-}
-
-/* Message Actions */
-.message-actions {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  display: flex;
-  gap: 2px;
-  background-color: var(--sidebar-bg);
-  padding: 4px;
-  border-radius: 16px;
-  box-shadow: 0 2px 8px var(--shadow-color);
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.2s ease-in-out, visibility 0.2s ease-in-out;
-  z-index: 1;
-}
-
-.message-container:hover .message-actions {
-  opacity: 1;
-  visibility: visible;
-}
-
-.message-container.sent .message-actions {
-  right: calc(100% + 8px);
-}
-
-.message-container.received .message-actions {
-  left: calc(100% + 8px);
-}
-
-.action-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--text-secondary);
+.status-icon {
   font-size: 1rem;
-  padding: 6px;
-  border-radius: 50%;
-  display: flex;
-  cursor: pointer;
-  text-align: left;
-  padding: 0.5rem;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  color: #8a8a8a; /* Default grey */
+}
+
+.status-icon.seen {
+  color: #53bdeb; /* WhatsApp's blue for seen */
+}
+
+/* Reply Bubble */
+.reply-bubble {
+  background-color: rgba(0, 0, 0, 0.05);
+  border-left: 2px solid var(--primary-color);
+  padding: 6px 10px;
+  margin-bottom: 6px;
+  border-radius: 8px;
+}
+
+.reply-sender {
+  font-weight: bold;
+  color: var(--primary-color);
+  font-size: 0.85rem;
+  margin: 0 0 2px 0;
+}
+
+.reply-text {
   font-size: 0.9rem;
+  color: #606060;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 250px;
 }
 
-.message-actions-menu button:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.message-edit-view {
+/* Edit Form */
+.edit-form {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  width: 100%;
 }
 
 .edit-input {
   width: 100%;
-  padding: 0.75rem;
-  border: 1px solid #feca57;
-  border-radius: 10px;
-  background: rgba(0, 0, 0, 0.2);
-  color: #fff;
-  font-size: 1rem;
+  padding: 8px;
+  border: 1px solid var(--primary-color);
+  border-radius: 8px;
+  background: #fff;
+  color: #303030;
+  font-size: 0.95rem;
+  resize: none;
 }
-
-.edit-input:focus { outline: none; }
 
 .edit-actions {
   display: flex;
@@ -176,11 +123,75 @@
 }
 
 .edit-actions button {
-  padding: 0.5rem 1rem;
+  padding: 6px 12px;
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  font-weight: bold;
+  font-weight: 500;
+}
+
+.save-btn {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.cancel-btn {
+  background-color: #e0e0e0;
+  color: #303030;
+}
+
+/* New Action Menu Trigger */
+.menu-trigger-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px; /* Position to the top-right for ALL messages */
+  background: none;
+  border: none;
+  color: #606060;
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 50%;
+  transition: opacity 0.2s, background-color 0.2s;
+  z-index: 5;
+  opacity: 0; /* Hidden by default */
+}
+
+.message-bubble:hover .menu-trigger-btn {
+  opacity: 1; /* Show on hover */
+}
+
+
+
+.menu-trigger-btn:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+  color: #303030;
+}
+
+/* Action Menu Portal */
+.action-menu-portal {
+  position: absolute;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1001;
+  overflow: hidden;
+  width: 180px; /* Set a fixed width for predictable positioning */
+}
+
+.action-menu-portal button {
+  display: block;
+  width: 100%;
+  padding: 10px 15px;
+  background: none;
+  border: none;
+  text-align: left;
+  color: #303030;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.action-menu-portal button:hover {
+  background-color: #f0f0f0;
 }
 
 .edit-save-btn {

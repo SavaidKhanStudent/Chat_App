@@ -1,31 +1,27 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { FaReply, FaEllipsisV, FaEdit, FaTrash } from 'react-icons/fa';
-import { BsCheck, BsCheck2All } from 'react-icons/bs';
+import React, { useState, useRef, useEffect } from 'react';
+import ReactDOM from 'react-dom';
+import { BsCheck, BsCheck2All, BsThreeDotsVertical } from 'react-icons/bs';
 import './Message.css';
 
-const Message = ({ msg, currentUser, onReply, getMessageById, formatSeenAt, onEdit, onDelete }) => {
-  const [showMenu, setShowMenu] = useState(false);
+const Message = ({ msg, currentUser, friendUid, onReply, getMessageById, formatSeenAt, onEdit, onDelete }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editedText, setEditedText] = useState(msg.text);
-  const menuRef = useRef(null);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0, left: 'auto' });
 
   const isSent = msg.senderId === currentUser?.uid;
-  const canEdit = isSent && (Date.now() - (msg.timestamp?.toDate().getTime() || 0)) < 60000; // 1 minute
-  const canDelete = isSent;
+  const menuRef = useRef(null);
+  const triggerRef = useRef(null);
+
+  const canEdit = isSent && (Date.now() - (msg.timestamp?.toDate().getTime() || 0)) < 900000; // 15 minutes
+  const canDeleteForEveryone = isSent;
 
   const repliedToMessage = msg.replyTo ? getMessageById(msg.replyTo) : null;
-
-  const renderMessageStatus = () => {
-    if (!isSent) return null;
-    if (msg.seen) return <BsCheck2All className="status-icon seen" />;
-    if (msg.delivered) return <BsCheck2All className="status-icon" />;
-    return <BsCheck className="status-icon" />;
-  };
 
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (menuRef.current && !menuRef.current.contains(event.target)) {
-        setShowMenu(false);
+        setIsMenuOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -39,21 +35,46 @@ const Message = ({ msg, currentUser, onReply, getMessageById, formatSeenAt, onEd
     setIsEditing(false);
   };
 
+  const handleOpenMenu = (e) => {
+    e.preventDefault();
+    const triggerRect = triggerRef.current.getBoundingClientRect();
+    const menuWidth = 180; // From Message.css
+
+    const position = {
+      top: triggerRect.bottom + window.scrollY + 2,
+      left: isSent
+        ? triggerRect.right + window.scrollX - menuWidth // Open left for sent messages
+        : triggerRect.left + window.scrollX, // Open right for received messages
+    };
+
+    setMenuPosition(position);
+    setIsMenuOpen(true);
+  };
+
+  const renderMessageStatus = () => {
+    if (!isSent) return null;
+    if (msg.seen) return <BsCheck2All className="status-icon seen" title={`Seen at ${formatSeenAt(msg.seenAt)}`} />;
+    if (msg.deliveredTo?.includes(friendUid)) return <BsCheck2All className="status-icon" title="Delivered" />;
+    if (msg.timestamp) return <BsCheck className="status-icon" title="Sent" />;
+    return null;
+  };
+
   if (isEditing) {
     return (
-      <div className={`message-wrapper ${isSent ? 'sent' : 'received'}`}>
-        <div className="message-edit-view">
-          <input
-            type="text"
-            value={editedText}
-            onChange={(e) => setEditedText(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()}
-            autoFocus
-            className="edit-input"
-          />
-          <div className="edit-actions">
-            <button onClick={handleSaveEdit} className="edit-save-btn">Save</button>
-            <button onClick={() => setIsEditing(false)} className="edit-cancel-btn">Cancel</button>
+      <div className={`message-container ${isSent ? 'sent' : 'received'}`}>
+        <div className="message-bubble">
+          <div className="edit-form">
+            <textarea
+              value={editedText}
+              onChange={(e) => setEditedText(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSaveEdit())}
+              autoFocus
+              className="edit-input"
+            />
+            <div className="edit-actions">
+              <button onClick={() => setIsEditing(false)} className="cancel-btn">Cancel</button>
+              <button onClick={handleSaveEdit} className="save-btn">Save</button>
+            </div>
           </div>
         </div>
       </div>
@@ -61,37 +82,37 @@ const Message = ({ msg, currentUser, onReply, getMessageById, formatSeenAt, onEd
   }
 
   return (
-    <div className={`message-wrapper ${isSent ? 'sent' : 'received'}`}>
-      <div className="message">
+    <div className={`message-container ${isSent ? 'sent' : 'received'}`}>
+      <div className="message-bubble">
+        <button ref={triggerRef} onClick={handleOpenMenu} className="menu-trigger-btn">
+          <BsThreeDotsVertical />
+        </button>
         {repliedToMessage && (
-          <div className="quoted-reply">
-            <p className="quoted-sender">{repliedToMessage.senderName || 'User'}</p>
-            <p className="quoted-text">{repliedToMessage.text}</p>
+          <div className="reply-bubble">
+            <p className="reply-sender">{repliedToMessage.senderName || 'User'}</p>
+            <p className="reply-text">{repliedToMessage.text}</p>
           </div>
         )}
-        <div className="message-content">
-          <p>{msg.text} {msg.edited && <span className="edited-tag">(edited)</span>}</p>
-          <div className="message-footer">
-            <span className="timestamp">{new Date(msg.timestamp?.toDate()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-            {renderMessageStatus()}
-          </div>
-        </div>
-        <div className="message-actions">
-          <button className="reply-btn" onClick={() => onReply(msg)}><FaReply /></button>
-          <div className="message-actions-trigger">
-            <button className="more-actions-btn" onClick={() => setShowMenu(prev => !prev)}><FaEllipsisV /></button>
-            {showMenu && (
-              <div className="message-actions-menu" ref={menuRef}>
-                {canEdit && <button onClick={() => { setIsEditing(true); setShowMenu(false); }}><FaEdit /> Edit</button>}
-                {canDelete && <button onClick={() => { onDelete(msg.id, 'everyone'); setShowMenu(false); }}><FaTrash /> Delete for Everyone</button>}
-                <button onClick={() => { onDelete(msg.id, 'me'); setShowMenu(false); }}><FaTrash /> Delete for Me</button>
-              </div>
-            )}
-          </div>
+        <p className="message-text">{msg.text}</p>
+        <div className="message-meta">
+          {msg.edited && <span className="edited-tag">edited</span>}
+          <span className="timestamp">{new Date(msg.timestamp?.toDate()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+          {renderMessageStatus()}
         </div>
       </div>
-      {isSent && msg.seen && (
-        <div className="seen-status">{formatSeenAt(msg.seenAt)}</div>
+
+      {isMenuOpen && ReactDOM.createPortal(
+        <div
+          ref={menuRef}
+          className="action-menu-portal"
+          style={{ top: menuPosition.top, left: menuPosition.left, right: menuPosition.right }}
+        >
+          <button onClick={() => { onReply(msg); setIsMenuOpen(false); }}>Reply</button>
+          {canEdit && <button onClick={() => { setIsEditing(true); setIsMenuOpen(false); }}>Edit</button>}
+          <button onClick={() => { onDelete(msg.id, 'me'); setIsMenuOpen(false); }}>Delete for Me</button>
+          {canDeleteForEveryone && <button onClick={() => { onDelete(msg.id, 'everyone'); setIsMenuOpen(false); }}>Delete for Everyone</button>}
+        </div>,
+        document.body
       )}
     </div>
   );
