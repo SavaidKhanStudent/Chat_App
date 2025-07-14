@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { auth, db, rtdb } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, onSnapshot, setDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
@@ -14,14 +14,16 @@ export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const currentUidRef = useRef(null); // Ref to hold the UID
 
   useEffect(() => {
-    let profileUnsubscribe; // To hold the onSnapshot unsubscribe function
+    let profileUnsubscribe;
 
     const authUnsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
+        currentUidRef.current = user.uid; // Store UID in ref
         setCurrentUser(user);
-        // Clean up any previous profile listener
+
         if (profileUnsubscribe) {
           profileUnsubscribe();
         }
@@ -31,23 +33,23 @@ export const AuthProvider = ({ children }) => {
           if (docSnap.exists()) {
             const profileData = docSnap.data();
             setUserProfile(profileData);
-            // Update online status if needed
             if (!profileData.online) {
               updateDoc(userDocRef, { online: true });
             }
           } else {
-            setUserProfile(null); // User document doesn't exist yet
+            setUserProfile(null);
           }
           setLoading(false);
         });
 
         // Realtime Database presence management
-        const userStatusDatabaseRef = ref(rtdb, '/status/' + user.uid);
+        const userStatusDatabaseRef = ref(rtdb, `/status/${user.uid}`);
         const isOfflineForDatabase = { state: 'offline', last_changed: rtdbServerTimestamp() };
         const isOnlineForDatabase = { state: 'online', last_changed: rtdbServerTimestamp() };
 
         onValue(ref(rtdb, '.info/connected'), (snapshot) => {
           if (snapshot.val() === false) return;
+
           onDisconnect(userStatusDatabaseRef).set(isOfflineForDatabase).then(() => {
             set(userStatusDatabaseRef, isOnlineForDatabase);
             const userStatusFirestoreRef = doc(db, 'users', user.uid);
@@ -58,24 +60,27 @@ export const AuthProvider = ({ children }) => {
       } else {
         // User is signed out
         if (profileUnsubscribe) profileUnsubscribe();
-        if (currentUser) {
-            const userRef = doc(db, 'users', currentUser.uid);
-            updateDoc(userRef, { online: false, lastSeen: serverTimestamp() }).catch(() => {});
+
+        // Use the UID from the ref to update status on sign-out
+        if (currentUidRef.current) {
+          const userRef = doc(db, 'users', currentUidRef.current);
+          updateDoc(userRef, { online: false, lastSeen: serverTimestamp() }).catch(() => {});
+          currentUidRef.current = null; // Clear the ref
         }
+
         setCurrentUser(null);
         setUserProfile(null);
         setLoading(false);
       }
     });
 
-    // Cleanup function for the useEffect hook
     return () => {
       authUnsubscribe();
       if (profileUnsubscribe) {
         profileUnsubscribe();
       }
     };
-  }, []); // Run only once on mount
+  }, []);
 
   const value = {
     currentUser,
