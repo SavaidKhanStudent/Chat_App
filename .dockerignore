@@ -1,0 +1,17 @@
+# Git and Node specific
+.git
+.gitignore
+node_modules
+npm-debug.log
+
+# Build artifacts
+build
+
+# Docker specific
+Dockerfile
+.dockerignore
+nginx.conf
+
+# OS specific
+.DS_Store
+Thumbs.db
